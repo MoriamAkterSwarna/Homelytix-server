@@ -3,7 +3,9 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const app = express();
 require('dotenv').config()
+
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 3000; 
 app.use(cors());
 app.use(express.json());
@@ -37,13 +39,38 @@ async function run() {
         const query = { email: email };
       const existingUser = await usersCollection.findOne(query);
       if(existingUser){
-        res.send("User already exists")
+        // res.send("User already exists");
+        res.status(409).json({ error: "User already exists" });
         return;
       }
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await usersCollection.insertOne({username, email, password: hashedPassword});
+        const encryptedPassword = await bcrypt.hash(password, 10);
+        const result = await usersCollection.insertOne({username, email, password: encryptedPassword});
         res.send(result);
       
+      })
+      app.post("/signin", async(req, res)=>{
+            const {email, password} = req.body;
+            try{
+                const validUser = await usersCollection.findOne({email});
+                if(!validUser){
+                    res.status(401).json({ error: "User not found" });
+                    return;
+                }
+                const validPass = bcrypt.compareSync(password, validUser.password);
+                if(!validPass){
+                    res.status(401).json({ error: "Invalid credentials" });
+                    return;
+                }
+                const token = jwt.sign({id: validUser._id}, process.env.JWT_SECRET);
+                const {password: pass, ...rest} = validUser;
+                res.cookie("token", token, {httpOnly: true}).status(200).json(rest);
+            //   res.send(validUser);
+            
+            // return res.status(200).json(validUser);
+            }
+            catch(error){
+                console.log(error);
+            }
       })
   
 
