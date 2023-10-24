@@ -37,7 +37,8 @@ async function run() {
       });
 
       app.post("/users", async(req, res)=>{
-        const {username, email, password} = req.body;
+        const {username, email, password, photoURL} = req.body;
+        const photo = photoURL || "https://icons8.com/icon/492ILERveW8G/male-user"
         const query = { email: email };
       const existingUser = await usersCollection.findOne(query);
       if(existingUser){
@@ -46,7 +47,7 @@ async function run() {
         return;
       }
         const encryptedPassword = await bcrypt.hash(password, 10);
-        const result = await usersCollection.insertOne({username, email, password: encryptedPassword});
+        const result = await usersCollection.insertOne({username, email, password: encryptedPassword, photo});
         res.send(result);
       
       })
@@ -77,6 +78,37 @@ async function run() {
             }
       })
   
+      app.post("/google", async(req, res)=>{
+        try{
+            const user = await usersCollection.findOne({email: req.body.email});
+            if(user){
+              const token = jwt.sign({id: user._id}, process.env.JWT_SECRET);
+                const {password: pass, ...rest} = user;
+                res.cookie("access_token", token, 
+                {httpOnly: true}).status(200).json({rest, token});
+                
+                return;
+            }
+            else{
+              const generatePassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+              const hashedPass = await bcrypt.hash(generatePassword, 10);
+              const newUser =({username: req.body.username, email: req.body.email, password: hashedPass, avatar: req.body.photo});
+              
+              const result = await usersCollection.insertOne(newUser);
+                console.log(newUser)
+                
+              const token = jwt.sign({id: newUser._id}, process.env.JWT_SECRET);
+              const {password: pass, ...rest} = newUser;
+              console.log(rest)
+              res.cookie("access_token", token,{httpOnly: true}).status(200).json({rest, token});
+              // res.status(200).json({newUser});
+              return;
+            }
+        }
+        catch(error){
+            console.log(error)
+        }
+      })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -95,3 +127,4 @@ app.get('/', (req, res) =>{
 app.listen(port, () => {
     console.log(`Homelytix server is running on port ${port}`)
 })
+// https://icons8.com/icon/492ILERveW8G/male-user
